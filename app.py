@@ -1,14 +1,58 @@
-import numpy as np
-import streamlit as st
+from flask import Flask, render_template, request, jsonify
+import pandas as pd
 import pickle
+import os
 
-model=pickle.load(open('linear_regression_model.pkl','rb'))
-st.title('Linear Regression Salary Prediction Model')
-st.write("This app predicts the salary based on years of experience using a pre-trained Linear Regression model.")
-years_experience = st.number_input('Enter Years of Experience:', min_value=0.0, max_value=50.0, step=0.1)
-if st.button('Predict Salary'):
-    predicted_salary = model.predict(np.array([[years_experience]]))
-    st.write(f'Predicted Salary: ${predicted_salary[0]:.2f}')
-    st.success('Prediction Successful!')
-    st.write('Developed by Sravanthi')
-    print("Model hasbeen Pickled and saved as linear_regression_model.pkl")
+app = Flask(__name__, template_folder='templates')
+
+# Load models
+model_names = [
+    'LinearRegression', 'RobustRegression', 'RidgeRegression', 'LassoRegression', 'ElasticNet',
+    'PolynomialRegression', 'SGDRegressor', 'ANN', 'RandomForest', 'SVM', 'LGBM',
+    'XGBoost', 'KNN'
+]
+
+models = {}
+for name in model_names:
+    try:
+        with open(f'{name}.pkl', 'rb') as f:
+            models[name] = pickle.load(f)
+        print(f"Loaded {name}")
+    except Exception as e:
+        print(f"Warning: Could not load {name}: {e}")
+
+# Load evaluation results
+try:
+    results_df = pd.read_csv('model_evaluation_results.csv')
+except:
+    results_df = pd.DataFrame()
+
+@app.route('/')
+def index():
+    return render_template('index.html', model_names=model_names)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    model_name = request.form['model']
+    input_data = {
+        'Avg. Area Income': float(request.form['Avg. Area Income']),
+        'Avg. Area House Age': float(request.form['Avg. Area House Age']),
+        'Avg. Area Number of Rooms': float(request.form['Avg. Area Number of Rooms']),
+        'Avg. Area Number of Bedrooms': float(request.form['Avg. Area Number of Bedrooms']),
+        'Area Population': float(request.form['Area Population'])
+    }
+    input_df = pd.DataFrame([input_data])
+   
+    if model_name in models:
+        model = models[model_name]
+        prediction = model.predict(input_df)[0]
+        return render_template('results.html', prediction=prediction, model_name=model_name)
+    else:
+        return jsonify({'error': 'Model not found'}), 400
+
+@app.route('/results')
+def results():
+    return render_template('model.html', tables=[results_df.to_html(classes='data')], titles=results_df.columns.values)
+
+if __name__ == '__main__':
+    app.run(debug=True)
